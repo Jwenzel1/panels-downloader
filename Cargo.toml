@@ -1,0 +1,11 @@
+[package]
+name = "panels-downloader"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.95"
+bytes = "1.9.0"
+reqwest = { version = "0.12.12", features = ["json"] }
+serde = { version = "1.0.217", features = ["derive"] }
+tokio = { version = "1.43.0", features = ["full"] }

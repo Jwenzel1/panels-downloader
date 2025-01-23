@@ -1,0 +1,16 @@
+{
+    "request": {
+        "method": "GET",
+        "urlPathPattern": "/content/.*"
+    },
+    "response": {
+        "status": 200,
+        "headers": {
+            "Content-Type": "image/jpeg"
+        },
+        "bodyFileName": "test_wallpaper.jpg",
+        "transformerParameters": {
+            "disableBodyFileTemplating": true
+        }
+    }
+}
