@@ -119,6 +119,8 @@ impl App {
         for (thread_number, mut reciever) in recievers.into_iter().enumerate() {
             let download_dir = self.download_directory.clone();
             futures.spawn(async move {
+                // The reciever needs to be closed before we start calling recv because the
+                // call to recv will block forever if the channel is open becauase it will wait for more messages.
                 reciever.close();
                 let mut count = 0;
                 let client = Client::new();
