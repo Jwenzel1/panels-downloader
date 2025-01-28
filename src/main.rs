@@ -50,6 +50,9 @@ impl ManifestData {
         mut download_dir: PathBuf,
         filename: &str,
     ) -> Result<()> {
+        if !self.is_wallpaper() {
+            bail!("Manifest does not contain wallpaper data")
+        }
         download_dir.push(filename);
         download_dir.set_extension(".jpg");
         let wallpaper_bytes = client
