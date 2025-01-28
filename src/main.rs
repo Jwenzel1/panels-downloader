@@ -115,13 +115,12 @@ impl App {
                 .send(wallpaper.clone())
                 .context("Failed to send ManifestData through channel")?;
         }
+        // Drop the senders so that channels will be closed and the recievers will read until there's nothing left
+        drop(senders);
         let mut futures = JoinSet::new();
         for (thread_number, mut reciever) in recievers.into_iter().enumerate() {
             let download_dir = self.download_directory.clone();
             futures.spawn(async move {
-                // The reciever needs to be closed before we start calling recv because the
-                // call to recv will block forever if the channel is open becauase it will wait for more messages.
-                reciever.close();
                 let mut count = 0;
                 let client = Client::new();
                 while let Some(wallpaper) = reciever.recv().await {
