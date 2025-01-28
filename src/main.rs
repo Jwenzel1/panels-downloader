@@ -2,9 +2,7 @@ use anyhow::{bail, Context, Result};
 use reqwest::Client;
 use serde::Deserialize;
 use std::cmp::max;
-use std::ops::Index;
 use std::{collections::HashMap, fs::create_dir_all, path::PathBuf};
-use tokio::sync::mpsc::unbounded_channel;
 use tokio::{fs::File, io::AsyncWriteExt, task::JoinSet};
 
 #[derive(Deserialize, Debug, Clone)]
@@ -50,7 +48,7 @@ impl ManifestData {
             bail!("Manifest does not contain wallpaper data")
         }
         download_dir.push(filename);
-        download_dir.set_extension(".jpg");
+        download_dir.set_extension("jpg");
         let wallpaper_bytes = client
             .get(self.wallpaper_url().unwrap())
             .send()
@@ -119,30 +117,20 @@ impl App {
         )?;
         let manifest = Manifest::get(&self.panels_domain).await?;
         let wallpapers = manifest.wallpapers();
-        let mut senders = Vec::with_capacity(self.workers);
-        let mut recievers = Vec::with_capacity(self.workers);
+        let mut wallpaper_lists = Vec::with_capacity(self.workers);
         for _ in 0..self.workers {
-            let (sender, reciever) = unbounded_channel::<ManifestData>();
-            senders.push(sender);
-            recievers.push(reciever);
+            wallpaper_lists.push(Vec::new());
         }
         for (i, wallpaper) in wallpapers.into_iter().enumerate() {
-            senders
-                .index(i % self.workers)
-                .send(wallpaper.clone())
-                .context("Failed to send ManifestData through channel")?;
+            wallpaper_lists[i % self.workers].push(wallpaper.clone());
         }
-        // Drop the senders so that channels will be closed and the recievers will read until there's nothing left
-        drop(senders);
         let mut futures: JoinSet<Result<()>> = JoinSet::new();
-        for (thread_number, mut reciever) in recievers.into_iter().enumerate() {
+        for (thread_number, wallpaper_list) in wallpaper_lists.into_iter().enumerate() {
             let download_dir = self.download_directory.clone();
             futures.spawn(async move {
-                let mut count = 0;
                 let client = Client::new();
-                while let Some(wallpaper) = reciever.recv().await {
-                    let filename = format!("{}_{}", thread_number, count);
-                    count += 1;
+                for (wallpaper_num, wallpaper) in wallpaper_list.into_iter().enumerate() {
+                    let filename = format!("{}_{}", thread_number, wallpaper_num);
                     wallpaper
                         .download_wallpaper(&client, download_dir.clone(), &filename)
                         .await?;
