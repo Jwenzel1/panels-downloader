@@ -32,16 +32,12 @@ impl ManifestData {
         self.dhd.is_some() || self.dsd.is_some()
     }
 
-    fn wallpaper_url(&self) -> Result<&str> {
-        let wallpaper_url_str = if self.is_wallpaper() {
-            self.dhd
-                .as_ref()
-                .unwrap_or_else(|| self.dsd.as_ref().unwrap())
-                .as_str()
+    fn wallpaper_url(&self) -> Option<&str> {
+        if let Some(url) = self.dhd.as_ref().or(self.dsd.as_ref()) {
+            Some(url)
         } else {
-            bail!("ManifestData does not contain wallpaper data")
-        };
-        Ok(wallpaper_url_str)
+            None
+        }
     }
 
     async fn download_wallpaper(
@@ -59,7 +55,7 @@ impl ManifestData {
             .get(self.wallpaper_url().unwrap())
             .send()
             .await
-            .context("Failed to download wallpaper")?
+            .context("Failed to connect to server to download wallpaper")?
             .bytes()
             .await
             .context("Failed to recieve data from the server")?;
