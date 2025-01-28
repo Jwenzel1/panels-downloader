@@ -1,5 +1,4 @@
 use anyhow::{bail, Context, Result};
-use bytes::Bytes;
 use reqwest::Client;
 use serde::Deserialize;
 use std::cmp::max;
@@ -45,15 +44,34 @@ impl ManifestData {
         Ok(wallpaper_url_str)
     }
 
-    async fn download_wallpaper(&self, client: &Client) -> Result<Bytes> {
-        client
+    async fn download_wallpaper(
+        &self,
+        client: &Client,
+        mut download_dir: PathBuf,
+        filename: &str,
+    ) -> Result<()> {
+        download_dir.push(filename);
+        download_dir.set_extension(".jpg");
+        let wallpaper_bytes = client
             .get(self.wallpaper_url().unwrap())
             .send()
             .await
             .context("Failed to download wallpaper")?
             .bytes()
             .await
-            .context("Failed to recieve data from the server")
+            .context("Failed to recieve data from the server")?;
+        let mut file_handle = File::create_new(download_dir)
+            .await
+            .context("Failed to open filepath")?;
+        file_handle
+            .write_all(&wallpaper_bytes)
+            .await
+            .context("Failed to write wallpaper data to file")?;
+        file_handle
+            .flush()
+            .await
+            .context("Failed to flush file contents")?;
+        Ok(())
     }
 }
 
@@ -117,30 +135,20 @@ impl App {
         }
         // Drop the senders so that channels will be closed and the recievers will read until there's nothing left
         drop(senders);
-        let mut futures = JoinSet::new();
+        let mut futures: JoinSet<Result<()>> = JoinSet::new();
         for (thread_number, mut reciever) in recievers.into_iter().enumerate() {
             let download_dir = self.download_directory.clone();
             futures.spawn(async move {
                 let mut count = 0;
                 let client = Client::new();
                 while let Some(wallpaper) = reciever.recv().await {
-                    let mut wallpaper_path = download_dir.clone();
-                    wallpaper_path.push(format!("{thread_number}_{count}"));
-                    wallpaper_path.set_extension("jpg");
+                    let filename = format!("{}_{}", thread_number, count);
                     count += 1;
-                    let Ok(wallpaper_bytes) = wallpaper.download_wallpaper(&client).await else {
-                        continue;
-                    };
-                    let Ok(mut file_handle) = File::create_new(wallpaper_path).await else {
-                        continue;
-                    };
-                    if let Err(_) = file_handle.write_all(&wallpaper_bytes).await {
-                        continue;
-                    }
-                    if let Err(_) = file_handle.flush().await {
-                        continue;
-                    }
+                    wallpaper
+                        .download_wallpaper(&client, download_dir.clone(), &filename)
+                        .await?;
                 }
+                Ok(())
             });
         }
         futures.join_all().await;
